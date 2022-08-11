@@ -11,9 +11,7 @@
 static int __init startupMonitor_init(void)
 {
     if (create_char_device() < 0)
-    {
         return -1;
-    }
 
     syscall_hook_init();
 
