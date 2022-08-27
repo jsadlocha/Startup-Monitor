@@ -2,6 +2,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include "fifoqueue.h"
+#include "chardriver.h"
 
 MODULE_LICENSE("GPL");
 
@@ -15,6 +16,12 @@ void add_item(struct FifoQueue *p, const char *str)
   }
   len = strlen(str) > 254 ? 254 : strlen(str);
   new_p = kmalloc(len + 1, GFP_KERNEL);
+
+  if (new_p == 0)
+  {
+    printk(KERN_ALERT "%s: Memory allocation error!\n", CLASS_NAME);
+    return;
+  }
   memcpy(new_p, str, len);
   new_p[len] = 0;
   p->array[p->head] = new_p;
