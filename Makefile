@@ -1,6 +1,6 @@
 KDIR ?= /lib/modules/`uname -r`/build
 obj-m = startupmon.o
-startupmon-objs := ./src/startupmon.o ./src/fifoqueue.o ./src/chardriver.o ./src/syscallhook.o
+startupmon-objs := ./src/startupmon.o ./src/ringbuffer.o ./src/chardriver.o ./src/syscallhook.o
 all:
 	make -C $(KDIR) M=$(PWD) modules
 	#strip startupmon.ko

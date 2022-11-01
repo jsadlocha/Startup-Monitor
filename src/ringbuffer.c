@@ -1,12 +1,12 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include "fifoqueue.h"
+#include "ringbuffer.h"
 #include "chardriver.h"
 
 MODULE_LICENSE("GPL");
 
-void add_item(struct FifoQueue *p, const char *str)
+void add_item(struct ring_buffer *p, const char *str)
 {
   unsigned int len = 0;
   char *new_p;
@@ -28,17 +28,20 @@ void add_item(struct FifoQueue *p, const char *str)
   p->head = (p->head + 1) % p->len;
 }
 
-void remove_item(struct FifoQueue *p)
+static void __remove(struct ring_buffer *p)
 {
-  if (p->tail != p->head)
-  {
-    kfree(p->array[p->tail]);
-    p->array[p->tail] = 0;
-    p->tail = (p->tail + 1) % p->len;
-  }
+  kfree(p->array[p->tail]);
+  p->array[p->tail] = 0;
+  p->tail = (p->tail + 1) % p->len;
 }
 
-char *get_item_from_top(struct FifoQueue *p)
+void remove_item(struct ring_buffer *p)
+{
+  if (p->tail != p->head)
+    __remove(p);
+}
+
+char *get_item_from_top(struct ring_buffer *p)
 {
   if (p->tail == p->head)
   {
@@ -47,17 +50,13 @@ char *get_item_from_top(struct FifoQueue *p)
   return p->array[p->tail];
 }
 
-void cleanup_queue(struct FifoQueue *p)
+void cleanup_queue(struct ring_buffer *p)
 {
   while (p->tail != p->head)
-  {
-    kfree(p->array[p->tail]);
-    p->array[p->tail] = 0;
-    p->tail = (p->tail + 1) % p->len;
-  }
+    __remove(p);
 }
 
-unsigned int list_of_items_in_queue(struct FifoQueue *p)
+unsigned int list_of_items_in_queue(struct ring_buffer *p)
 {
   unsigned int size = 0;
   unsigned int tail = p->tail;

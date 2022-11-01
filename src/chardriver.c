@@ -7,19 +7,19 @@
 #include <linux/mutex.h>
 
 #include "chardriver.h"
-#include "fifoqueue.h"
+#include "ringbuffer.h"
 
 MODULE_LICENSE("GPL");
 
-static DEFINE_MUTEX(mtx_Read);
-static DEFINE_MUTEX(mtx_Write);
+static DEFINE_MUTEX(mtx_read);
+static DEFINE_MUTEX(mtx_write);
 
-DECLARE_WAIT_QUEUE_HEAD(readQueue);
+DECLARE_WAIT_QUEUE_HEAD(read_queue);
 
-static int majorNumber;
-static int numberOpens = 0;
-static struct class *startupMonitorClass = NULL;
-static struct device *startupMonitorDevice = NULL;
+static int major_number;
+static int number_opens = 0;
+static struct class *startup_monitor_class = NULL;
+static struct device *startup_monitor_device = NULL;
 
 static int dev_open(struct inode *, struct file *);
 static int dev_release(struct inode *, struct file *);
@@ -33,7 +33,7 @@ static struct file_operations fops = {
     .release = dev_release,
 };
 
-struct FifoQueue fque = {
+struct ring_buffer buf_ring = {
     .head = 0,
     .tail = 0,
     .len = NUM_QUEUE,
@@ -41,8 +41,8 @@ struct FifoQueue fque = {
 
 static int dev_open(struct inode *inodep, struct file *filep)
 {
-  numberOpens++;
-  // printk(KERN_INFO "%s: Device has been opened %d times\n", CLASS_NAME, numberOpens);
+  number_opens++;
+  // printk(KERN_INFO "%s: Device has been opened %d times\n", CLASS_NAME, number_opens);
   return 0;
 }
 
@@ -53,30 +53,28 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
   char *str;
   int res;
 
-  res = wait_event_interruptible(readQueue, strlen(get_item_from_top(&fque)) != 0);
+  res = wait_event_interruptible(read_queue, strlen(get_item_from_top(&buf_ring)) != 0);
   if (res)
   {
     printk(KERN_INFO "%s: Signal Exit\n", CLASS_NAME);
     return res;
   }
 
-  mutex_lock(&mtx_Read);
-  str = get_item_from_top(&fque);
+  mutex_lock(&mtx_read);
+  str = get_item_from_top(&buf_ring);
 
   bytes_read = strlen(str);
   error_count = copy_to_user(buffer, str, bytes_read);
 
-  remove_item(&fque);
+  remove_item(&buf_ring);
 
-  mutex_unlock(&mtx_Read);
+  mutex_unlock(&mtx_read);
 
   if (error_count)
   {
     printk(KERN_INFO "%s: Failed to send %d characters to the user\n", CLASS_NAME, error_count);
     return -EFAULT;
   }
-
-  // printk(KERN_INFO "%s: Sent %d characters to the user\n", CLASS_NAME, bytes_read);
 
   return bytes_read;
 }
@@ -96,54 +94,51 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 
   add_item_to_queue(str);
 
-  // printk(KERN_INFO "%s: Received %zu characters from the user\n", CLASS_NAME, len);
-  //  printk(KERN_INFO "%s: Write: %s\n", CLASS_NAME, message);
-
   return len;
 }
 
 static int dev_release(struct inode *inodep, struct file *filep)
 {
   // printk(KERN_INFO "%s: Device successfully closed\n", CLASS_NAME);
-  numberOpens--;
+  number_opens--;
   return 0;
 }
 
 void add_item_to_queue(const char *str)
 {
-  mutex_lock(&mtx_Write);
-  add_item(&fque, str);
-  mutex_unlock(&mtx_Write);
+  mutex_lock(&mtx_write);
+  add_item(&buf_ring, str);
+  mutex_unlock(&mtx_write);
 
-  wake_up_interruptible(&readQueue);
+  wake_up_interruptible(&read_queue);
 }
 
 int create_char_device(void)
 {
-  majorNumber = register_chrdev(0, DEVICE_NAME, &fops);
-  if (majorNumber < 0)
+  major_number = register_chrdev(0, DEVICE_NAME, &fops);
+  if (major_number < 0)
   {
     printk(KERN_ALERT "%s: Failed to register a major number\n", CLASS_NAME);
     return -1;
   }
 
-  printk(KERN_INFO "%s: Registered correctly with major number %d\n", CLASS_NAME, majorNumber);
+  printk(KERN_INFO "%s: Registered correctly with major number %d\n", CLASS_NAME, major_number);
 
-  startupMonitorClass = class_create(THIS_MODULE, CLASS_NAME);
-  if (IS_ERR(startupMonitorClass))
+  startup_monitor_class = class_create(THIS_MODULE, CLASS_NAME);
+  if (IS_ERR(startup_monitor_class))
   {
-    unregister_chrdev(majorNumber, DEVICE_NAME);
+    unregister_chrdev(major_number, DEVICE_NAME);
     printk(KERN_ALERT "%s: Failed to create the device\n", CLASS_NAME);
     return -1;
   }
 
   printk(KERN_INFO "%s: Device class registered correctly\n", CLASS_NAME);
 
-  startupMonitorDevice = device_create(startupMonitorClass, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
-  if (IS_ERR(startupMonitorDevice))
+  startup_monitor_device = device_create(startup_monitor_class, NULL, MKDEV(major_number, 0), NULL, DEVICE_NAME);
+  if (IS_ERR(startup_monitor_device))
   {
-    class_destroy(startupMonitorClass);
-    unregister_chrdev(majorNumber, DEVICE_NAME);
+    class_destroy(startup_monitor_class);
+    unregister_chrdev(major_number, DEVICE_NAME);
     printk(KERN_ALERT "%s: Failed to create the device\n", CLASS_NAME);
     return -1;
   }
@@ -154,14 +149,14 @@ int create_char_device(void)
 
 void remove_char_device(void)
 {
-  device_destroy(startupMonitorClass, MKDEV(majorNumber, 0));
+  device_destroy(startup_monitor_class, MKDEV(major_number, 0));
   // class_unregister(ncrpsmonClass);
-  class_destroy(startupMonitorClass);
-  unregister_chrdev(majorNumber, DEVICE_NAME);
+  class_destroy(startup_monitor_class);
+  unregister_chrdev(major_number, DEVICE_NAME);
 
-  mutex_lock(&mtx_Read);
-  cleanup_queue(&fque);
-  mutex_unlock(&mtx_Read);
+  mutex_lock(&mtx_read);
+  cleanup_queue(&buf_ring);
+  mutex_unlock(&mtx_read);
 
   printk(KERN_INFO "%s: Character device removed\n", CLASS_NAME);
 }

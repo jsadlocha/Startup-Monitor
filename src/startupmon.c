@@ -2,7 +2,7 @@
 #include <linux/device.h>
 
 #include "chardriver.h"
-#include "fifoqueue.h"
+#include "ringbuffer.h"
 #include "syscallhook.h"
 
 #define AUTHOR "Jaroslaw Sadlocha"
