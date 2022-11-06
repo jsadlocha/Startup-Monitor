@@ -2,7 +2,7 @@
 #include <linux/syscalls.h>
 #include <linux/kallsyms.h>
 
-#include "chardriver.h"
+#include "../chardriver/chardriver.h"
 
 MODULE_LICENSE("GPL");
 

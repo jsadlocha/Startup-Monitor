@@ -7,7 +7,7 @@
 #include <linux/mutex.h>
 
 #include "chardriver.h"
-#include "ringbuffer.h"
+#include "../ringbuffer/ringbuffer.h"
 
 MODULE_LICENSE("GPL");
 

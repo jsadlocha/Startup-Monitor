@@ -1,9 +1,9 @@
 #include <linux/module.h>
 #include <linux/device.h>
 
-#include "chardriver.h"
-#include "ringbuffer.h"
-#include "syscallhook.h"
+#include "chardriver/chardriver.h"
+#include "ringbuffer/ringbuffer.h"
+#include "syscallhook/syscallhook.h"
 
 #define AUTHOR "Jaroslaw Sadlocha"
 #define DESC "Startup Applications Monitor"
